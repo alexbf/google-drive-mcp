@@ -44,7 +44,7 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 		async (input: z.infer<typeof inputSchema>) => {
 			try {
 				const {fileId, text} = input;
-				const textToAppend = text as string;
+				const textToAppend = typeof text === 'string' ? text : String(text);
 				const metadataParams = new URLSearchParams();
 				metadataParams.set('fields', 'id,name,mimeType');
 				metadataParams.set('supportsAllDrives', 'true');
