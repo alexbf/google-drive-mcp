@@ -43,6 +43,7 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 		},
 		async ({fileId, text}) => {
 			try {
+				const textToAppend = z.string().parse(text);
 				const metadataParams = new URLSearchParams();
 				metadataParams.set('fields', 'id,name,mimeType');
 				metadataParams.set('supportsAllDrives', 'true');
@@ -52,14 +53,15 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 
 				const {content} = await downloadFile(config.token, fileId);
 				const separator = content.length === 0 || content.endsWith('\n') ? '' : '\n';
-				const updatedContent = `${content}${separator}${text}`;
+				const updatedContent = `${content}${separator}${textToAppend}`;
+				const appendedCharacters = textToAppend.length + (separator === '\n' ? 1 : 0);
 
 				await uploadFile(config.token, {mimeType: fileMetadata.mimeType}, updatedContent, fileMetadata.mimeType, fileId);
 
 				return jsonResult(outputSchema.parse({
 					fileId: fileMetadata.id,
 					name: fileMetadata.name,
-					appendedCharacters: text.length,
+					appendedCharacters,
 					message: 'Text appended successfully',
 				}));
 			} catch (error) {
