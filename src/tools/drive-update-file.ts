@@ -4,6 +4,11 @@ import type {Config} from './types.js';
 import {makeDriveApiCall, uploadFile} from '../utils/drive-api.js';
 import {jsonResult} from '../utils/response.js';
 import {strictSchemaWithAliases} from '../utils/schema.js';
+import {
+	assertRequestedTextMimeType,
+	assertTextFileSupported,
+	formatDriveToolError,
+} from '../utils/text-file-guards.js';
 
 const inputSchema = strictSchemaWithAliases(
 	{
@@ -27,38 +32,6 @@ const fileMetadataSchema = z.object({
 	mimeType: z.string(),
 });
 
-function guardTextFile(toolName: string, fileMimeType: string, requestedMimeType: string): void {
-	if (fileMimeType.startsWith('application/vnd.google-apps.')) {
-		throw new Error(`${toolName} only supports non-Google-native text files. Google Workspace files (application/vnd.google-apps.*) are not supported.`);
-	}
-
-	if (!fileMimeType.startsWith('text/')) {
-		throw new Error(`${toolName} only supports text/* files. Current file mimeType is "${fileMimeType}".`);
-	}
-
-	if (!requestedMimeType.startsWith('text/')) {
-		throw new Error(`${toolName} only supports text/* uploads. Requested mimeType is "${requestedMimeType}".`);
-	}
-}
-
-function formatDriveError(toolName: string, error: unknown): string {
-	const message = error instanceof Error ? error.message : String(error);
-
-	if (message.includes('404')) {
-		return `${toolName} failed: file not found or inaccessible.`;
-	}
-
-	if (message.includes('403')) {
-		return `${toolName} failed: permission denied.`;
-	}
-
-	if (message.includes('401')) {
-		return `${toolName} failed: unauthorized or expired token.`;
-	}
-
-	return `${toolName} failed: ${message}`;
-}
-
 export function registerDriveUpdateFile(server: McpServer, config: Config): void {
 	server.registerTool(
 		'drive_update_file',
@@ -80,7 +53,8 @@ export function registerDriveUpdateFile(server: McpServer, config: Config): void
 				metadataParams.set('supportsAllDrives', 'true');
 
 				const fileMetadata = fileMetadataSchema.parse(await makeDriveApiCall('GET', `/files/${fileId}?${metadataParams.toString()}`, config.token));
-				guardTextFile('drive_update_file', fileMetadata.mimeType, mimeType);
+				assertTextFileSupported('drive_update_file', fileMetadata.mimeType);
+				assertRequestedTextMimeType('drive_update_file', mimeType);
 
 				await uploadFile(config.token, {mimeType}, content, mimeType, fileId);
 
@@ -91,7 +65,7 @@ export function registerDriveUpdateFile(server: McpServer, config: Config): void
 					message: 'File content updated successfully',
 				}));
 			} catch (error) {
-				throw new Error(formatDriveError('drive_update_file', error));
+				throw new Error(formatDriveToolError('drive_update_file', error));
 			}
 		},
 	);

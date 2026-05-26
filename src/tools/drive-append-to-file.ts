@@ -4,6 +4,7 @@ import type {Config} from './types.js';
 import {downloadFile, makeDriveApiCall, uploadFile} from '../utils/drive-api.js';
 import {jsonResult} from '../utils/response.js';
 import {strictSchemaWithAliases} from '../utils/schema.js';
+import {assertTextFileSupported, formatDriveToolError} from '../utils/text-file-guards.js';
 
 const inputSchema = strictSchemaWithAliases(
 	{
@@ -26,34 +27,6 @@ const fileMetadataSchema = z.object({
 	mimeType: z.string(),
 });
 
-function guardTextFile(toolName: string, fileMimeType: string): void {
-	if (fileMimeType.startsWith('application/vnd.google-apps.')) {
-		throw new Error(`${toolName} only supports non-Google-native text files. Google Workspace files (application/vnd.google-apps.*) are not supported.`);
-	}
-
-	if (!fileMimeType.startsWith('text/')) {
-		throw new Error(`${toolName} only supports text/* files. Current file mimeType is "${fileMimeType}".`);
-	}
-}
-
-function formatDriveError(toolName: string, error: unknown): string {
-	const message = error instanceof Error ? error.message : String(error);
-
-	if (message.includes('404')) {
-		return `${toolName} failed: file not found or inaccessible.`;
-	}
-
-	if (message.includes('403')) {
-		return `${toolName} failed: permission denied.`;
-	}
-
-	if (message.includes('401')) {
-		return `${toolName} failed: unauthorized or expired token.`;
-	}
-
-	return `${toolName} failed: ${message}`;
-}
-
 export function registerDriveAppendToFile(server: McpServer, config: Config): void {
 	server.registerTool(
 		'drive_append_to_file',
@@ -75,7 +48,7 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 				metadataParams.set('supportsAllDrives', 'true');
 
 				const fileMetadata = fileMetadataSchema.parse(await makeDriveApiCall('GET', `/files/${fileId}?${metadataParams.toString()}`, config.token));
-				guardTextFile('drive_append_to_file', fileMetadata.mimeType);
+				assertTextFileSupported('drive_append_to_file', fileMetadata.mimeType);
 
 				const {content} = await downloadFile(config.token, fileId);
 				const separator = content.length === 0 || content.endsWith('\n') ? '' : '\n';
@@ -90,7 +63,7 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 					message: 'Text appended successfully',
 				}));
 			} catch (error) {
-				throw new Error(formatDriveError('drive_append_to_file', error));
+				throw new Error(formatDriveToolError('drive_append_to_file', error));
 			}
 		},
 	);
