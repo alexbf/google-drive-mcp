@@ -1,0 +1,9 @@
+node_modules
+.env
+*.log
+.git
+.github
+src
+*.ts
+README.md
+eslint.config.mjs

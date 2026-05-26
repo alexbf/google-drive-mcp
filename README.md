@@ -144,3 +144,88 @@ To release:
 1. Use `npm version <major | minor | patch>` to bump the version
 2. Run `git push --follow-tags` to push with tags
 3. Wait for GitHub Actions to publish to the NPM registry.
+
+## Azure Container App Deployment
+
+Deploy this server as a publicly accessible HTTPS endpoint on [Azure Container Apps](https://azure.microsoft.com/en-us/products/container-apps) so it can be registered as a custom connector in claude.ai.
+
+### Prerequisites
+
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (`az`) installed and up to date
+- [Docker](https://docs.docker.com/get-docker/) installed (used locally only if you build manually; `az acr build` builds in the cloud)
+- Node.js 20+ (for local development; not required for deployment itself)
+- An active Azure subscription
+- Google OAuth credentials — see [Setup](#setup) above for how to create them
+
+### Steps
+
+#### 1. Log in to Azure
+
+```bash
+az login
+az account set --subscription "<your-subscription-id>"
+```
+
+#### 2. Configure credentials
+
+Export your Google OAuth credentials as environment variables:
+
+```bash
+export GOOGLE_CLIENT_ID='your-google-client-id'
+export GOOGLE_CLIENT_SECRET='your-google-client-secret'
+```
+
+Optionally customise the deployment:
+
+```bash
+export APP_NAME='gdrive-mcp'      # base name for all Azure resources
+export LOCATION='canadaeast'      # Azure region (canadaeast recommended for Quebec)
+```
+
+#### 3. Run the deployment script
+
+```bash
+chmod +x azure/deploy.sh
+./azure/deploy.sh
+```
+
+The script performs four steps automatically:
+
+1. **Provision** — deploys a Resource Group, Log Analytics Workspace, Container App Environment, Azure Container Registry (Basic), and a Container App via `azure/main.bicep`.
+2. **Build & push** — builds the Docker image in the cloud using `az acr build` and pushes it to the provisioned ACR.
+3. **Update** — updates the Container App to use the newly pushed image.
+4. **Report** — prints the final HTTPS URL.
+
+#### 4. Note the endpoint URL
+
+At the end of the script you will see something like:
+
+```
+MCP endpoint : https://gdrive-mcp.bluefield-12345678.canadaeast.azurecontainerapps.io/mcp
+```
+
+#### 5. Register as a custom connector in claude.ai
+
+1. Open **claude.ai** → click your profile → **Settings**
+2. Go to **Customize** → **Connectors**
+3. Click **Add custom connector**
+4. Paste the MCP endpoint URL (e.g. `https://<fqdn>/mcp`)
+5. Save
+
+#### 6. First-time OAuth flow
+
+Because the Container App scales to zero when idle, the first request after a cold start takes a few seconds. On the very first use, claude.ai will redirect you through a Google OAuth consent screen to authorise access to your Drive. After that, the token is managed automatically by the client.
+
+### Infrastructure overview
+
+| Resource | Name pattern | Notes |
+|---|---|---|
+| Resource Group | `<appName>-rg` | All resources live here |
+| Log Analytics | `<appName>-logs` | 30-day retention |
+| Container App Env | `<appName>-env` | Shared environment |
+| Container Registry | `<appName>acr` | Basic SKU, admin enabled |
+| Container App | `<appName>` | 0–1 replicas, 0.25 vCPU / 0.5 GiB |
+
+### Customising parameters
+
+Edit `azure/parameters.bicepparam` to change defaults before running the script, or pass values directly via environment variables as shown above.
