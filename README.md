@@ -72,6 +72,8 @@ The server holds no tokens or state - it just proxies OAuth to Google.
 | `file_download` | Download file content (supports export for Google Docs/Sheets) |
 | `file_upload` | Upload a new file |
 | `file_update` | Update file content or metadata |
+| `drive_update_file` | Replace the full content of an existing plain text/Markdown file |
+| `drive_append_to_file` | Append text to an existing plain text/Markdown file |
 | `file_copy` | Copy a file |
 | `file_move` | Move a file to a different folder |
 | `file_trash` | Move to trash |
@@ -96,6 +98,25 @@ The server holds no tokens or state - it just proxies OAuth to Google.
 | `permission_create` | Share a file with a user, group, domain, or anyone |
 | `permission_update` | Change a user's access level |
 | `permission_delete` | Revoke access to a file |
+
+### `drive_update_file` example
+
+```json
+{
+  "fileId": "1AbCdEfGhIjKlMnOp",
+  "content": "# Release Notes\n\n- Added a new MCP tool.",
+  "mimeType": "text/markdown"
+}
+```
+
+### `drive_append_to_file` example
+
+```json
+{
+  "fileId": "1AbCdEfGhIjKlMnOp",
+  "text": "- Follow-up note added on a new line."
+}
+```
 
 ## Drive Query Syntax
 

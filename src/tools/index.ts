@@ -10,6 +10,8 @@ import {registerFileUpdate} from './file-update.js';
 import {registerFileCopy} from './file-copy.js';
 import {registerFileMove} from './file-move.js';
 import {registerFileDelete} from './file-delete.js';
+import {registerDriveUpdateFile} from './drive-update-file.js';
+import {registerDriveAppendToFile} from './drive-append-to-file.js';
 
 // Folders
 import {registerFolderCreate} from './folder-create.js';
@@ -46,6 +48,8 @@ export function registerAll(server: McpServer, config: Config): void {
 	registerFileCopy(server, config);
 	registerFileMove(server, config);
 	registerFileDelete(server, config);
+	registerDriveUpdateFile(server, config);
+	registerDriveAppendToFile(server, config);
 
 	// Folders
 	registerFolderCreate(server, config);
