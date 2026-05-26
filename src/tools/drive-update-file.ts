@@ -46,8 +46,9 @@ export function registerDriveUpdateFile(server: McpServer, config: Config): void
 				idempotentHint: true,
 			},
 		},
-		async ({fileId, content, mimeType}) => {
+		async (input: z.infer<typeof inputSchema>) => {
 			try {
+				const {fileId, content, mimeType} = input;
 				const metadataParams = new URLSearchParams();
 				metadataParams.set('fields', 'id,name,mimeType');
 				metadataParams.set('supportsAllDrives', 'true');

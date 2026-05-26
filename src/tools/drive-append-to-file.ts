@@ -41,9 +41,10 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 				idempotentHint: false,
 			},
 		},
-		async ({fileId, text}) => {
+		async (input: z.infer<typeof inputSchema>) => {
 			try {
-				const textToAppend = String(text);
+				const {fileId, text} = input;
+				const textToAppend = text as string;
 				const metadataParams = new URLSearchParams();
 				metadataParams.set('fields', 'id,name,mimeType');
 				metadataParams.set('supportsAllDrives', 'true');
@@ -52,9 +53,9 @@ export function registerDriveAppendToFile(server: McpServer, config: Config): vo
 				assertTextFileSupported('drive_append_to_file', fileMetadata.mimeType);
 
 				const {content} = await downloadFile(config.token, fileId);
-				const separator = content.length === 0 || content.endsWith('\n') ? '' : '\n';
+				const separator: '' | '\n' = content.length === 0 || content.endsWith('\n') ? '' : '\n';
 				const updatedContent = `${content}${separator}${textToAppend}`;
-				const appendedCharacters = textToAppend.length + (separator === '\n' ? 1 : 0);
+				const appendedCharacters = textToAppend.length + separator.length;
 
 				await uploadFile(config.token, {mimeType: fileMetadata.mimeType}, updatedContent, fileMetadata.mimeType, fileId);
 
