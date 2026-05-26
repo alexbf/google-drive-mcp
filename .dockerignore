@@ -3,7 +3,5 @@ node_modules
 *.log
 .git
 .github
-src
-*.ts
 README.md
 eslint.config.mjs
