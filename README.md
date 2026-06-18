@@ -44,7 +44,61 @@ The server runs on `http://localhost:3000` by default. Change with `PORT=3001`.
 claude mcp add --transport http google-drive-mcp http://localhost:3000/mcp
 ```
 
-## Architecture
+## Persistent OAuth Token
+
+By default the server holds no state — every restart requires the user to complete the Google OAuth flow again. When running on **Azure Container Apps** (which scales to zero between requests) this means re-authenticating after each scale-down.
+
+The fix is to persist the Google OAuth refresh token in **Azure App Configuration**, a managed key-value store with no infrastructure overhead.
+
+### How it works
+
+1. The first time a user completes the OAuth flow, the server saves the refresh token to Azure App Configuration under the key `gdrive-mcp/refresh-token`.
+2. On every subsequent startup the server loads the saved token and uses it to obtain a fresh Google access token automatically — no user interaction needed.
+
+### Setup
+
+#### 1. Create an App Configuration store
+
+Deploy the provided Bicep module (or add it to your existing template):
+
+```bash
+az deployment group create \
+  --resource-group <your-resource-group> \
+  --template-file azure/appconfig.bicep \
+  --parameters containerAppPrincipalId=<container-app-managed-identity-principal-id>
+```
+
+The module creates:
+- An App Configuration store (free SKU)
+- Role assignments granting the Container App's managed identity **Data Reader** and **Data Owner** access
+
+#### 2. Set the environment variable
+
+Add `AZURE_APP_CONFIG_ENDPOINT` to your Container App's environment variables, using the endpoint output from the Bicep deployment:
+
+```bash
+az containerapp update \
+  --name <app-name> \
+  --resource-group <your-resource-group> \
+  --set-env-vars AZURE_APP_CONFIG_ENDPOINT=https://<store-name>.azconfig.io
+```
+
+#### 3. Enable managed identity
+
+Ensure the Container App has a **system-assigned managed identity** enabled. This is what Azure uses in place of credentials — no secrets in your environment variables.
+
+### Clearing the stored token
+
+To force re-authentication (e.g. after revoking Google access), delete the key from Azure App Configuration:
+
+- **Portal**: open the App Configuration store → Configuration explorer → delete the key `gdrive-mcp/refresh-token`
+- **CLI**: `az appconfig kv delete --name <store-name> --key gdrive-mcp/refresh-token`
+
+### Local development (graceful degradation)
+
+If `AZURE_APP_CONFIG_ENDPOINT` is not set the server works exactly as before — token persistence is simply skipped. A warning is logged but no error is thrown. This means local development requires no Azure setup.
+
+
 
 This server acts as an **OAuth proxy** to Google:
 

@@ -7,6 +7,7 @@ import type {
 	OAuthMetadata, OAuthProtectedResourceMetadata, OAuthClientInformationFull, OAuthClientMetadata,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import {isTokenValid} from './utils/token-cache.js';
+import {loadRefreshToken, saveRefreshToken} from './tokenStore.js';
 
 // Google OAuth configuration - users must provide their own credentials
 const {GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET} = process.env;
@@ -62,6 +63,10 @@ const transport = process.env.MCP_TRANSPORT || 'stdio';
 
 			process.exit(1);
 		}
+
+		// Load persisted refresh token on startup so the server can serve
+		// authenticated Drive requests immediately after a restart or scale event.
+		let serverRefreshToken: string | null = await loadRefreshToken();
 
 		const app = express();
 		app.use(express.json({limit: '20mb'}));
@@ -188,7 +193,14 @@ const transport = process.env.MCP_TRANSPORT || 'stdio';
 					body: body.toString(),
 				});
 
-				const data = await response.json();
+				const data = await response.json() as Record<string, unknown>;
+
+				// Persist refresh token whenever Google returns one
+				if (response.ok && typeof data.refresh_token === 'string') {
+					serverRefreshToken = data.refresh_token;
+					void saveRefreshToken(data.refresh_token);
+				}
+
 				res.status(response.status).json(data);
 			} catch (error) {
 				console.error('Token exchange error:', error);
@@ -198,7 +210,31 @@ const transport = process.env.MCP_TRANSPORT || 'stdio';
 
 		// Stateless MCP endpoint
 		app.post('/mcp', async (req: Request, res: Response) => {
-			const token = extractBearerToken(req);
+			let token = extractBearerToken(req);
+
+			// If no client token but we have a persisted refresh token, use it to
+			// obtain an access token so the server works immediately after a restart.
+			if (!token && serverRefreshToken) {
+				try {
+					const body = new URLSearchParams({
+						grant_type: 'refresh_token',
+						refresh_token: serverRefreshToken,
+						client_id: GOOGLE_CLIENT_ID,
+						client_secret: GOOGLE_CLIENT_SECRET,
+					});
+					const tokenResponse = await fetch(GOOGLE_TOKEN_ENDPOINT, {
+						method: 'POST',
+						headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+						body: body.toString(),
+					});
+					const tokenData = await tokenResponse.json() as Record<string, unknown>;
+					if (tokenResponse.ok && typeof tokenData.access_token === 'string') {
+						token = tokenData.access_token;
+					}
+				} catch (error) {
+					console.error('google-drive-mcp: failed to refresh access token from stored refresh token:', error);
+				}
+			}
 
 			// Require auth, except for tools/list for discovery
 			const method = req.body?.method as string | undefined;
